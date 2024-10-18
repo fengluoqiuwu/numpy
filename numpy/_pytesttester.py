@@ -142,6 +142,9 @@ class PytestTester:
                 # so fetch module for suppression here.
                 from numpy.distutils import cpuinfo
 
+        if sys.version_info >= (3,12):
+            pytest_args += ["--ignore","numpy/distutils"]
+
         # Filter out annoying import messages. Want these in both develop and
         # release mode.
         pytest_args += [
