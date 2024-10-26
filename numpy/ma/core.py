@@ -5429,21 +5429,19 @@ class MaskedArray(ndarray):
         if self._mask is nomask:
             result = super().mean(axis=axis, dtype=dtype, **kwargs)[()]
         else:
-            is_float16_result = False
             if dtype is None:
-                if issubclass(self.dtype.type, (ntypes.integer, ntypes.bool)):
+                if issubclass(self.dtype.type,
+                              (ntypes.integer, ntypes.bool)):
                     dtype = mu.dtype('f8')
-                elif issubclass(self.dtype.type, ntypes.float16):
-                    dtype = mu.dtype('f4')
-                    is_float16_result = True
+                elif issubclass(self.dtype.type,
+                                (ntypes.floating, ntypes.complexfloating)):
+                    dtype = self.dtype.type
             dsum = self.sum(axis=axis, dtype=dtype, **kwargs)
             cnt = self.count(axis=axis, **kwargs)
             if cnt.shape == () and (cnt == 0):
                 result = masked
-            elif is_float16_result:
-                result = self.dtype.type(dsum * 1. / cnt)
             else:
-                result = dsum * 1. / cnt
+                result = (dsum * 1. / cnt).astype(dtype)
         if out is not None:
             out.flat = result
             if isinstance(out, MaskedArray):
@@ -5538,7 +5536,19 @@ class MaskedArray(ndarray):
             danom = umath.absolute(danom) ** 2
         else:
             danom *= danom
-        dvar = divide(danom.sum(axis, **kwargs), cnt).view(type(self))
+
+        if dtype is None:
+            if issubclass(self.dtype.type,
+                          (ntypes.integer, ntypes.bool)):
+                dtype = mu.dtype('f8')
+            elif issubclass(self.dtype.type,
+                            (ntypes.floating, ntypes.complexfloating)):
+                dtype = self.dtype.type
+
+        dvar = (divide(danom.sum(axis, **kwargs), cnt.astype(dtype)).
+                view(type(self)))
+
+
         # Apply the mask if it's not a scalar
         if dvar.ndim:
             dvar._mask = mask_or(self._mask.all(axis, **kwargs), (cnt <= 0))

@@ -5310,12 +5310,22 @@ class TestOptionalArgs:
             assert_equal(ma_f(a, axis=(0,1), keepdims=True)[...,:-1],
                          numpy_f(d[...,:-1], axis=(0,1), keepdims=True))
 
+        def test_return_dtypes(f, a, d):
+            numpy_f = numpy.__getattribute__(f)
+            ma_f = np.ma.__getattribute__(f)
+
+            for dtype in [np.bool, np.int8, np.uint8, np.float16]:
+                assert_equal(ma_f(a.astype(dtype)).dtype, numpy_f(d.astype(dtype)).dtype)
+
+
         for f in ['sum', 'prod', 'mean', 'var', 'std']:
             testaxis(f, a, d)
             testkeepdims(f, a, d)
+            test_return_dtypes(f, a, d)
 
         for f in ['min', 'max']:
             testaxis(f, a, d)
+            test_return_dtypes(f, a, d)
 
         d = (np.arange(24).reshape((2,3,4))%2 == 0)
         a = np.ma.array(d, mask=m)

@@ -924,7 +924,7 @@ def compress_nd(x, axis=None):
         return x._data
     # All is masked: return empty
     if m.all():
-        return nxarray([])
+        return nxarray([], dtype=x.dtype)
     # Filter elements through boolean indexing
     data = x._data
     for ax in axis:
