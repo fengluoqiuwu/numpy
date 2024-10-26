@@ -76,6 +76,8 @@ __all__ = [
     'var', 'where', 'zeros', 'zeros_like',
     ]
 
+from numpy.f2py.auxfuncs import isscalar
+
 MaskType = np.bool
 nomask = MaskType(0)
 
@@ -3486,10 +3488,11 @@ class MaskedArray(ndarray):
             self._mask = self._mask.view(make_mask_descr(dtype), ndarray)
             # Try to reset the shape of the mask (if we don't have a void).
             # This raises a ValueError if the dtype change won't work.
-            try:
-                self._mask.shape = self.shape
-            except (AttributeError, TypeError):
-                pass
+            if not self._mask.size==1:
+                try:
+                    self._mask.shape = self.shape
+                except (AttributeError, TypeError):
+                    pass
 
     @property
     def shape(self):
