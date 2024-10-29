@@ -189,7 +189,7 @@ initialize_normal_kwds(PyObject *out_args,
  * The function ensures that only one of these keys is present, as
  * validated prior to this function being called.
  *
- * @param normal_kwds A pointer to the keyword dictionary (PyObject*)
+ * @param[in,out] normal_kwds A pointer to the keyword dictionary (PyObject*)
  *                    containing the keyword arguments.
  *
  * @return Returns 0 on success, or -1 on failure. In case of failure,
@@ -232,12 +232,12 @@ normalize_signature_keyword(PyObject *normal_kwds)
  * arguments. In that case, if the positional argument at index 5 is
  * equal to _NoValue, it is also skipped.
  *
- * @param keywords An array of keyword strings corresponding to the
- *                 positional arguments.
- * @param args An array of positional arguments (PyObject* const).
- * @param len_args The number of positional arguments.
- * @param normal_kwds A pointer to the keyword dictionary (PyObject*)
- *                     to be populated with the arguments.
+ * @param[in] keywords An array of keyword strings corresponding to the
+ *                     positional arguments.
+ * @param[in] args An array of positional arguments.
+ * @param[in] len_args The number of positional arguments.
+ * @param[in,out] normal_kwds A pointer to the keyword dictionary
+ *                            to be populated with the arguments.
  * @return Returns 0 on success, or -1 on failure. In case of failure,
  *         an error is set that can be retrieved using Python's
  *         error handling mechanism.
@@ -271,16 +271,31 @@ copy_positional_args_to_kwargs(const char **keywords,
     return 0;
 }
 
-/*
- * Check a set of args for the `__array_ufunc__` method.  If more than one of
- * the input arguments implements `__array_ufunc__`, they are tried in the
- * order: subclasses before superclasses, otherwise left to right. The first
- * (non-None) routine returning something other than `NotImplemented`
- * determines the result. If all of the `__array_ufunc__` operations return
- * `NotImplemented` (or are None), a `TypeError` is raised.
+
+/**
+ * @brief Check a set of args for the `__array_ufunc__` method.
  *
- * Returns 0 on success and 1 on exception. On success, *result contains the
+ * If more than one of the input arguments implements `__array_ufunc__`,
+ * they are tried in the order: subclasses before superclasses, otherwise
+ * left to right. The first (non-None) routine returning something other
+ * than `NotImplemented` determines the result. If all of the `__array_ufunc__`
+ * operations return `NotImplemented` (or are None), a `TypeError` is raised.
+ *
+ * @param[in] ufunc Pointer to the PyUFuncObject representing the ufunc.
+ * @param[in] method The method name being called (e.g., "__call__", "reduce").
+ * @param[in] in_args Tuple containing input arguments for the ufunc.
+ * @param[in] out_args Tuple containing output arguments for the ufunc.
+ * @param[in] wheremask_obj Optional where mask.
+ * @param[in] args Pointer to an array of additional positional arguments.
+ * @param[in] len_args The number of additional positional arguments.
+ * @param[in] kwnames Optional tuple of keyword argument names.
+ * @param[out] result Pointer to a location where the result will be stored.
+ *
+ * @return 0 on success, 1 on exception. On success, *result contains the
  * result of the operation, if any. If *result is NULL, there is no override.
+ *
+ * @note This function will set the `TypeError` if no valid `__array_ufunc__`
+ * implementation is found or if an exception occurs during the call.
  */
 NPY_NO_EXPORT int
 PyUFunc_CheckOverride(PyUFuncObject *ufunc, char *method,
@@ -288,6 +303,17 @@ PyUFunc_CheckOverride(PyUFuncObject *ufunc, char *method,
         PyObject *const *args, Py_ssize_t len_args, PyObject *kwnames,
         PyObject **result)
 {
+    /*
+     * Check a set of args for the `__array_ufunc__` method.  If more than one of
+     * the input arguments implements `__array_ufunc__`, they are tried in the
+     * order: subclasses before superclasses, otherwise left to right. The first
+     * (non-None) routine returning something other than `NotImplemented`
+     * determines the result. If all of the `__array_ufunc__` operations return
+     * `NotImplemented` (or are None), a `TypeError` is raised.
+     *
+     * Returns 0 on success and 1 on exception. On success, *result contains the
+     * result of the operation, if any. If *result is NULL, there is no override.
+     */
     int status;
 
     int num_override_args;
@@ -333,8 +359,9 @@ PyUFunc_CheckOverride(PyUFuncObject *ufunc, char *method,
      * method have to normalize sig and signature.
      */
 
-    /* ufunc.__call__ */
-    if (strcmp(method, "__call__") == 0) {
+    /* ufunc.__call__ and ufunc.outer (identical to call) */
+    if (strcmp(method, "__call__") == 0 ||
+        strcmp(method, "outer") == 0) {
         status = normalize_signature_keyword(normal_kwds);
     }
     /* ufunc.reduce */
@@ -358,10 +385,6 @@ PyUFunc_CheckOverride(PyUFuncObject *ufunc, char *method,
                 NULL, NULL, "axis", "dtype", NULL};
         status = copy_positional_args_to_kwargs(keywords,
                 args, len_args, normal_kwds);
-    }
-    /* ufunc.outer (identical to call) */
-    else if (strcmp(method, "outer") == 0) {
-        status = normalize_signature_keyword(normal_kwds);
     }
     /* ufunc.at */
     else if (strcmp(method, "at") == 0) {
@@ -399,7 +422,7 @@ PyUFunc_CheckOverride(PyUFuncObject *ufunc, char *method,
                 continue;
             }
 
-            /* Check for sub-types to the right of obj. */
+            /* Check for subtypes to the right of obj. */
             for (int j = i + 1; j < num_override_args; j++) {
                 PyObject *other_obj = with_override[j];
                 if (other_obj != NULL &&
