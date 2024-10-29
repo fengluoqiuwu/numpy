@@ -5,24 +5,46 @@
 #include "numpy/ufuncobject.h"
 #include "npy_import.h"
 #include "npy_static_data.h"
-#include "multiarraymodule.h"
 #include "npy_pycompat.h"
 #include "override.h"
 #include "ufunc_override.h"
 
-
-/*
- * For each positional argument and each argument in a possible "out"
- * keyword, look for overrides of the standard ufunc behaviour, i.e.,
- * non-default __array_ufunc__ methods.
+/**
+ * @brief Identifies overrides of the standard ufunc behavior for given arguments.
  *
- * Returns the number of overrides, setting corresponding objects
- * in PyObject array ``with_override`` and the corresponding
- * __array_ufunc__ methods in ``methods`` (both using new references).
+ * The function iterates over all positional and "out" arguments, as well as
+ * the `wheremask_obj`, and checks if the `__array_ufunc__` method has been
+ * overridden by examining each object's type. If an object's class has already
+ * been recorded as an override, it is ignored.
  *
- * Only the first override for a given class is returned.
+ * Only the first override for a given class is retained. If an object's
+ * `__array_ufunc__` is set to `None`, an error is raised, and the function
+ * releases any references it holds before returning -1.
  *
- * Returns -1 on failure.
+ * The function skips instances of the base `ndarray` class and any subclasses
+ * that did not override `__array_ufunc__`.
+ *
+ * @param[in] in_args Tuple of input arguments to the ufunc.
+ * @param[in] out_args Optional tuple of output arguments to the ufunc,
+ *                     can be NULL.
+ * @param[in] wheremask_obj Optional object for `where` mask; can be NULL.
+ * @param[out] with_override Array of corresponding objects that provide
+ *                           a custom `__array_ufunc__`, using new reference.
+ * @param[out] methods Array of corresponding `__array_ufunc__` methods,
+ *                     using new reference.
+ *
+ * @return The number of overrides found and recorded,
+ *         or -1 if an error occurs.
+ * @throws PyExc_TypeError If `PyTuple_GET_ITEM` failed with `in_args`
+ *         or `out_args`, the function will raise `PyExc_TypeError` with
+ *         error message: "failed to retrieve argument from input or
+ *         output tuples.".
+ * @throws PyExc_TypeError If an object's `__array_ufunc__` method is `None`,
+ *         indicating that the object does not support ufunc operations.
+ *         In this case, the function raises a `PyExc_TypeError` with the
+ *         error message: "operand '<type>' does not support ufuncs
+ *         (__array_ufunc__=None)", where `<type>` is the actual type name
+ *         of the object.
  */
 static int
 get_array_ufunc_overrides(PyObject *in_args, PyObject *out_args, PyObject *wheremask_obj,
@@ -50,6 +72,11 @@ get_array_ufunc_overrides(PyObject *in_args, PyObject *out_args, PyObject *where
         }
         else {
             obj = wheremask_obj;
+        }
+        if (obj == NULL) {
+            PyErr_SetString(PyExc_TypeError,
+                    "failed to retrieve argument from input or output tuples.");
+            goto fail;
         }
         /*
          * Have we seen this class before?  If so, ignore.
@@ -95,9 +122,30 @@ fail:
 }
 
 
-/*
- * Build a dictionary from the keyword arguments, but replace out with the
- * normalized version (and always pass it even if it was passed by position).
+/**
+ * @brief Builds a dictionary from keyword arguments, replacing the `out`
+ *        argument with a normalized version, and ensuring `out` is always
+ *        included even if passed by position.
+ *
+ * This function initializes a dictionary for normalized keyword arguments.
+ * If the `kwnames` argument is not NULL, it iterates through the provided
+ * keyword names and adds them to the `normal_kwds` dictionary, associating
+ * each with the corresponding argument from `args`. If `out_args` is provided,
+ * it replaces the `out` key in the dictionary with the value of `out_args`.
+ * If `out_args` is NULL, it ensures that the `out` key is not present in
+ * the dictionary.
+ *
+ * @param[in] out_args A pointer to a PyObject representing the output arguments.
+ *                     It may be NULL.
+ * @param[in] args A pointer to an array of PyObject pointers representing
+ *                 positional arguments.
+ * @param[in] len_args The number of positional arguments in the `args` array.
+ * @param[in] kwnames A pointer to a PyObject representing the names of
+ *                    the keyword arguments. It may be NULL.
+ * @param[out] normal_kwds A pointer to a PyObject representing the dictionary
+ *                         where normalized keyword arguments will be stored.
+ *
+ * @return 0 on success, or -1 on failure (an error is set).
  */
 static int
 initialize_normal_kwds(PyObject *out_args,
@@ -133,11 +181,20 @@ initialize_normal_kwds(PyObject *out_args,
     return 0;
 }
 
-/*
- * ufunc() and ufunc.outer() accept 'sig' or 'signature'.  We guarantee
- * that it is passed as 'signature' by renaming 'sig' if present.
- * Note that we have already validated that only one of them was passed
- * before checking for overrides.
+/**
+ * @brief Normalize the keyword arguments by renaming 'sig' to 'signature'.
+ *
+ * This function checks if the keyword dictionary contains the key 'sig'.
+ * If 'sig' is found, it renames it to 'signature' in the dictionary.
+ * The function ensures that only one of these keys is present, as
+ * validated prior to this function being called.
+ *
+ * @param normal_kwds A pointer to the keyword dictionary (PyObject*)
+ *                    containing the keyword arguments.
+ *
+ * @return Returns 0 on success, or -1 on failure. In case of failure,
+ *         an error is set that can be retrieved using Python's
+ *         error handling mechanism.
  */
 static int
 normalize_signature_keyword(PyObject *normal_kwds)
@@ -162,6 +219,29 @@ normalize_signature_keyword(PyObject *normal_kwds)
 }
 
 
+/**
+ * @brief Copy positional arguments to a keyword dictionary.
+ *
+ * This function takes an array of keywords and a corresponding array of
+ * positional arguments, and populates the provided keyword dictionary
+ * with the values from the positional arguments based on the keywords.
+ * If a keyword is NULL, that positional argument is skipped.
+ *
+ * Note: The specific case where the index is 5 is only relevant for the
+ * 'reduce' operation, which is the only one that utilizes 5 keyword
+ * arguments. In that case, if the positional argument at index 5 is
+ * equal to _NoValue, it is also skipped.
+ *
+ * @param keywords An array of keyword strings corresponding to the
+ *                 positional arguments.
+ * @param args An array of positional arguments (PyObject* const).
+ * @param len_args The number of positional arguments.
+ * @param normal_kwds A pointer to the keyword dictionary (PyObject*)
+ *                     to be populated with the arguments.
+ * @return Returns 0 on success, or -1 on failure. In case of failure,
+ *         an error is set that can be retrieved using Python's
+ *         error handling mechanism.
+ */
 static int
 copy_positional_args_to_kwargs(const char **keywords,
         PyObject *const *args, Py_ssize_t len_args,
