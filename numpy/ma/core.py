@@ -848,8 +848,8 @@ class _DomainCheckInterval:
         # nans at masked positions cause RuntimeWarnings, even though
         # they are masked. To avoid this we suppress warnings.
         with np.errstate(invalid='ignore'):
-            return np.logical_or(np.greater(x, self.b),
-                                    np.less(x, self.a))
+            return np.logical_or(umath.greater(x, self.b).astype(np.bool),
+                                 umath.less(x, self.a).astype(np.bool))
 
 
 class _DomainTan:
@@ -867,7 +867,7 @@ class _DomainTan:
     def __call__(self, x):
         "Executes the call behavior."
         with np.errstate(invalid='ignore'):
-            return np.less(umath.absolute(umath.cos(x)), self.eps)
+            return np.less(umath.absolute(umath.cos(x)), self.eps).astype(np.bool)
 
 
 class _DomainSafeDivide:
@@ -904,7 +904,7 @@ class _DomainGreater:
     def __call__(self, x):
         "Executes the call behavior."
         with np.errstate(invalid='ignore'):
-            return np.less_equal(x, self.critical_value)
+            return umath.less_equal(x, self.critical_value).astype(np.bool)
 
 
 class _DomainGreaterEqual:
@@ -920,7 +920,7 @@ class _DomainGreaterEqual:
     def __call__(self, x):
         "Executes the call behavior."
         with np.errstate(invalid='ignore'):
-            return np.less(x, self.critical_value)
+            return umath.less(x, self.critical_value).astype(np.bool)
 
 
 class _MaskedUFunc:
@@ -3140,9 +3140,9 @@ class MaskedArray(ndarray):
         else:
             result = obj.view(type(self))
             result._update_from(self)
-            result._mask = self._mask.copy()
 
         if context is not None:
+            result._mask = self._mask.copy()
             func, args, out_i = context
             # args sometimes contains outputs (gh-10459), which we don't want
             input_args = args[:func.nin]
