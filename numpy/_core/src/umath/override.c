@@ -5,11 +5,13 @@
 #include "numpy/ufuncobject.h"
 #include "npy_import.h"
 #include "npy_static_data.h"
+#include "multiarraymodule.h"
 #include "npy_pycompat.h"
 #include "override.h"
 #include "ufunc_override.h"
 
 /**
+ * @file_internal
  * @brief Identifies overrides of the standard ufunc behavior for given arguments.
  *
  * The function iterates over all positional and "out" arguments, as well as
@@ -123,6 +125,7 @@ fail:
 
 
 /**
+ * @file_internal
  * @brief Builds a dictionary from keyword arguments, replacing the `out`
  *        argument with a normalized version, and ensuring `out` is always
  *        included even if passed by position.
@@ -182,6 +185,7 @@ initialize_normal_kwds(PyObject *out_args,
 }
 
 /**
+ * @file_internal
  * @brief Normalize the keyword arguments by renaming 'sig' to 'signature'.
  *
  * This function checks if the keyword dictionary contains the key 'sig'.
@@ -220,6 +224,7 @@ normalize_signature_keyword(PyObject *normal_kwds)
 
 
 /**
+ * @file_internal
  * @brief Copy positional arguments to a keyword dictionary.
  *
  * This function takes an array of keywords and a corresponding array of
@@ -273,12 +278,13 @@ copy_positional_args_to_kwargs(const char **keywords,
 
 
 /**
+ * @internal
  * @brief Check a set of args for the `__array_ufunc__` method.
  *
  * If more than one of the input arguments implements `__array_ufunc__`,
  * they are tried in the order: subclasses before superclasses, otherwise
  * left to right. The first (non-None) routine returning something other
- * than `NotImplemented` determines the result. If all of the `__array_ufunc__`
+ * than `NotImplemented` determines the result. If all of `__array_ufunc__`
  * operations return `NotImplemented` (or are None), a `TypeError` is raised.
  *
  * @param[in] ufunc Pointer to the PyUFuncObject representing the ufunc.
@@ -303,17 +309,6 @@ PyUFunc_CheckOverride(PyUFuncObject *ufunc, char *method,
         PyObject *const *args, Py_ssize_t len_args, PyObject *kwnames,
         PyObject **result)
 {
-    /*
-     * Check a set of args for the `__array_ufunc__` method.  If more than one of
-     * the input arguments implements `__array_ufunc__`, they are tried in the
-     * order: subclasses before superclasses, otherwise left to right. The first
-     * (non-None) routine returning something other than `NotImplemented`
-     * determines the result. If all of the `__array_ufunc__` operations return
-     * `NotImplemented` (or are None), a `TypeError` is raised.
-     *
-     * Returns 0 on success and 1 on exception. On success, *result contains the
-     * result of the operation, if any. If *result is NULL, there is no override.
-     */
     int status;
 
     int num_override_args;
