@@ -37,9 +37,9 @@
 
 /* Default user error mode (underflows are ignored, others warn) */
 #define UFUNC_ERR_DEFAULT                               \
-        (UFUNC_ERR_WARN << UFUNC_SHIFT_DIVIDEBYZERO) +  \
+        ((UFUNC_ERR_WARN << UFUNC_SHIFT_DIVIDEBYZERO) + \
         (UFUNC_ERR_WARN << UFUNC_SHIFT_OVERFLOW) +      \
-        (UFUNC_ERR_WARN << UFUNC_SHIFT_INVALID)
+        (UFUNC_ERR_WARN << UFUNC_SHIFT_INVALID))
 
 
 static int
